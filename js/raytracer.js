@@ -16,21 +16,26 @@ var textured_quad_fs =
 
 var ray_vs_src =
 "attribute vec2 pos;" +
+"uniform vec3 ray00, ray10, ray01, ray11;" +
+"varying vec3 px_ray;" +
 "void main(void){" +
+"	vec2 m = 0.5 * (pos.xy + vec2(1));" +
+"	px_ray = mix(mix(ray00, ray01, m.y), mix(ray10, ray11, m.y), m.x);" +
 "	gl_Position = vec4(pos, 0, 1);" +
 "}";
 
 var ray_fs_src =
 "precision highp float;" +
 "uniform float sample;" +
+"varying vec3 px_ray;" +
 "void main(void){" +
-"	vec2 col = gl_FragCoord.xy / vec2(640, 480);" +
+"	vec3 base_dir = 0.5 * (vec3(1) + normalize(px_ray));" +
 "	if (mod(sample, 2.0) == 0.0){" +
-"		gl_FragColor = vec4(col.x, col.y, 0, 1);" +
+"		float x = base_dir.x;" +
+"		base_dir.x = base_dir.y;" +
+"		base_dir.y = x;" +
 "	}" +
-"	else {" +
-"		gl_FragColor = vec4(0, col.x, col.y, 1);" +
-"	}" +
+"	gl_FragColor = vec4(base_dir, 1);" +
 "}";
 
 window.onload = function(){
@@ -49,6 +54,18 @@ window.onload = function(){
 
 	pos_attrib = gl.getAttribLocation(raytrace, "pos");
 	sample_unif = gl.getUniformLocation(raytrace, "sample");
+	var ray_unifs = [];
+	ray_unifs.push(gl.getUniformLocation(raytrace, "ray00"));
+	ray_unifs.push(gl.getUniformLocation(raytrace, "ray10"));
+	ray_unifs.push(gl.getUniformLocation(raytrace, "ray01"));
+	ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
+	gl.useProgram(raytrace);
+	var rays = perspectiveCamera(new Vec3f(0, 0, -2), new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 65.0, 640.0 / 480.0);
+	for (var i = 0; i < 4; ++i){
+		var vals = rays[i].flatten();
+		gl.uniform3fv(ray_unifs[i], rays[i].flatten());
+	}
+
 	gl.enableVertexAttribArray(pos_attrib);
 	gl.vertexAttribPointer(pos_attrib, 2, gl.FLOAT, false, 0, 0);
 
@@ -98,6 +115,22 @@ function render(elapsed){
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
 	++sample_pass;
+}
+
+// Compute a perspective projection camera and return the directions to each corner pixel
+// returns: [ray00, ray01, ray10, ray11]
+function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
+	var dz = normalize(target.sub(eye));
+	var dx = normalize(cross(dz, up).negate());
+	var dy = normalize(cross(dx, dz));
+	var dim_y = 2.0 * Math.sin(fovy / 2.0 * Math.PI / 180.0);
+	var dim_x = dim_y * aspect_ratio;
+	rays = [];
+	rays.push(normalize(dz.sub(dx.scale(0.5 * dim_x)).sub(dy.scale(0.5 * dim_y))));
+	rays.push(normalize(dz.sub(dx.scale(0.5 * dim_x)).add(dy.scale(0.5 * dim_y))));
+	rays.push(normalize(dz.add(dx.scale(0.5 * dim_x)).sub(dy.scale(0.5 * dim_y))));
+	rays.push(normalize(dz.add(dx.scale(0.5 * dim_x)).add(dy.scale(0.5 * dim_y))));
+	return rays;
 }
 
 // Initialize a WebGL context in the canvas DOM element passed
