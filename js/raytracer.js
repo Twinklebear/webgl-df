@@ -32,13 +32,16 @@ var ray_fs_src =
 "float sphere_distance(vec3 x, vec3 c, float r){" +
 "	return length(x - c) - r;" +
 "}" +
+"float torus_distance(vec3 x, vec3 c, float r, float ring_r){" +
+"	return length(vec2(length(x.xy - c.xy) - r, x.z - c.z)) - ring_r;" +
+"}" +
 "void main(void){" +
 "	vec3 ray_dir = normalize(px_ray);" +
 "	const float max_dist = 1.0e10;" +
 "	const int max_iter = 50;" +
 "	float t = 0.0;" +
 "	for (int i = 0; i < max_iter; ++i){" +
-"		float dt = sphere_distance(eye + ray_dir * t, vec3(0, 0, 0), 0.5);" +
+"		float dt = torus_distance(eye + ray_dir * t, vec3(0, 0, 0), 0.5, 0.1);" +
 "		t += dt;" +
 "		if (dt <= 1.0e-2){" +
 "			gl_FragColor = vec4(1);" +
@@ -71,12 +74,13 @@ window.onload = function(){
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray01"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
 	gl.useProgram(raytrace);
-	var rays = perspectiveCamera(new Vec3f(0, 0, -1), new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 75.0, 640.0 / 480.0);
+	var eye_pos = new Vec3f(0, 0, -2);
+	var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, 640 / 480);
 	for (var i = 0; i < 4; ++i){
 		var vals = rays[i].flatten();
 		gl.uniform3fv(ray_unifs[i], rays[i].flatten());
 	}
-	gl.uniform3fv(eye_unif, [0.0, 0.0, -2.0]);
+	gl.uniform3fv(eye_unif, eye_pos.flatten());
 
 	gl.enableVertexAttribArray(pos_attrib);
 	gl.vertexAttribPointer(pos_attrib, 2, gl.FLOAT, false, 0, 0);
@@ -135,8 +139,8 @@ function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
 	var dz = normalize(target.sub(eye));
 	var dx = normalize(cross(dz, up).negate());
 	var dy = normalize(cross(dx, dz));
-	var dim_y = 2.0 * Math.sin((fovy * Math.PI) / 360.0);
-	var dim_x = dim_y * aspect_ratio;
+	var dim_y = 2.0 * Math.sin(fovy / 2.0 * Math.PI / 180.0);
+	var dim_x = dim_y * (1.0 / aspect_ratio);
 	rays = [];
 	rays.push(normalize(dz.sub(dx.scale(0.5 * dim_x)).sub(dy.scale(0.5 * dim_y))));
 	rays.push(normalize(dz.sub(dx.scale(0.5 * dim_x)).add(dy.scale(0.5 * dim_y))));
