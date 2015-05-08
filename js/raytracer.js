@@ -27,15 +27,25 @@ var ray_vs_src =
 var ray_fs_src =
 "precision highp float;" +
 "uniform float sample;" +
+"uniform vec3 eye;" +
 "varying vec3 px_ray;" +
+"float sphere_distance(vec3 x, vec3 c, float r){" +
+"	return length(x - c) - r;" +
+"}" +
 "void main(void){" +
-"	vec3 base_dir = 0.5 * (vec3(1) + normalize(px_ray));" +
-"	if (mod(sample, 2.0) == 0.0){" +
-"		float x = base_dir.x;" +
-"		base_dir.x = base_dir.y;" +
-"		base_dir.y = x;" +
+"	vec3 ray_dir = normalize(px_ray);" +
+"	const float max_dist = 1.0e10;" +
+"	const int max_iter = 50;" +
+"	float t = 0.0;" +
+"	for (int i = 0; i < max_iter; ++i){" +
+"		float dt = sphere_distance(eye + ray_dir * t, vec3(0, 0, 0), 0.5);" +
+"		t += dt;" +
+"		if (dt <= 1.0e-2){" +
+"			gl_FragColor = vec4(1);" +
+"			return;" +
+"		}" +
 "	}" +
-"	gl_FragColor = vec4(base_dir, 1);" +
+"	gl_FragColor = 0.2 * vec4(mod(sample, 2.0), 0, mod(sample + 1.0, 2.0), 1);" +
 "}";
 
 window.onload = function(){
@@ -54,17 +64,19 @@ window.onload = function(){
 
 	pos_attrib = gl.getAttribLocation(raytrace, "pos");
 	sample_unif = gl.getUniformLocation(raytrace, "sample");
+	eye_unif = gl.getUniformLocation(raytrace, "eye");
 	var ray_unifs = [];
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray00"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray10"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray01"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
 	gl.useProgram(raytrace);
-	var rays = perspectiveCamera(new Vec3f(0, 0, -2), new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 65.0, 640.0 / 480.0);
+	var rays = perspectiveCamera(new Vec3f(0, 0, -1), new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 75.0, 640.0 / 480.0);
 	for (var i = 0; i < 4; ++i){
 		var vals = rays[i].flatten();
 		gl.uniform3fv(ray_unifs[i], rays[i].flatten());
 	}
+	gl.uniform3fv(eye_unif, [0.0, 0.0, -2.0]);
 
 	gl.enableVertexAttribArray(pos_attrib);
 	gl.vertexAttribPointer(pos_attrib, 2, gl.FLOAT, false, 0, 0);
@@ -123,7 +135,7 @@ function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
 	var dz = normalize(target.sub(eye));
 	var dx = normalize(cross(dz, up).negate());
 	var dy = normalize(cross(dx, dz));
-	var dim_y = 2.0 * Math.sin(fovy / 2.0 * Math.PI / 180.0);
+	var dim_y = 2.0 * Math.sin((fovy * Math.PI) / 360.0);
 	var dim_x = dim_y * aspect_ratio;
 	rays = [];
 	rays.push(normalize(dz.sub(dx.scale(0.5 * dim_x)).sub(dy.scale(0.5 * dim_y))));
