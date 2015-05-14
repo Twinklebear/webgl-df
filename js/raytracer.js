@@ -35,16 +35,28 @@ var ray_fs_src =
 "float torus_distance(vec3 x, vec3 c, float r, float ring_r){" +
 "	return length(vec2(length(x.xy - c.xy) - r, x.z - c.z)) - ring_r;" +
 "}" +
+"float scene_distance(vec3 x){" +
+"	return sphere_distance(x, vec3(0, 0, 0), 0.5);" +
+"}" +
+"vec3 gradient(vec3 p){" +
+"	float h = 0.5 * 0.00001;" +
+"	float den = 1.0 / (2.0 * h);" +
+"	float dx = den * (scene_distance(p + vec3(h, 0, 0)) - scene_distance(p - vec3(h, 0, 0)));" +
+"	float dy = den * (scene_distance(p + vec3(0, h, 0)) - scene_distance(p - vec3(0, h, 0)));" +
+"	float dz = den * (scene_distance(p + vec3(0, 0, h)) - scene_distance(p - vec3(0, 0, h)));" +
+"	return vec3(dx, dy, dz);" +
+"}" +
 "void main(void){" +
 "	vec3 ray_dir = normalize(px_ray);" +
 "	const float max_dist = 1.0e10;" +
 "	const int max_iter = 50;" +
 "	float t = 0.0;" +
 "	for (int i = 0; i < max_iter; ++i){" +
-"		float dt = torus_distance(eye + ray_dir * t, vec3(0, 0, 0), 0.5, 0.1);" +
+"		vec3 p = eye + ray_dir * t;" +
+"		float dt = scene_distance(p);" +
 "		t += dt;" +
 "		if (dt <= 1.0e-2){" +
-"			gl_FragColor = vec4(1);" +
+"			gl_FragColor = vec4((normalize(gradient(p)) + vec3(1)) * 0.5, 1.0);" +
 "			return;" +
 "		}" +
 "	}" +
