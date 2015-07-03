@@ -28,6 +28,8 @@ var ray_fs_src =
 "precision highp float;" +
 "uniform float sample;" +
 "uniform vec3 eye;" +
+"uniform sampler2D prev_tex;" +
+"uniform vec2 canvas_dim;" +
 "varying vec3 px_ray;" +
 "float sphere_distance(vec3 x, vec3 c, float r){" +
 "	return length(x - c) - r;" +
@@ -51,21 +53,25 @@ var ray_fs_src =
 "	const float max_dist = 1.0e10;" +
 "	const int max_iter = 50;" +
 "	float t = 0.0;" +
+"	vec3 pass_color;" +
 "	for (int i = 0; i < max_iter; ++i){" +
 "		vec3 p = eye + ray_dir * t;" +
 "		float dt = scene_distance(p);" +
 "		t += dt;" +
 "		if (dt <= 1.0e-2){" +
-"			gl_FragColor = vec4((normalize(gradient(p)) + vec3(1)) * 0.5, 1.0);" +
-"			return;" +
+"			pass_color = vec3((normalize(gradient(p)) + vec3(1)) * 0.5);" +
+"			break;" +
 "		}" +
 "	}" +
-"	gl_FragColor = 0.2 * vec4(mod(sample, 2.0), 0, mod(sample + 1.0, 2.0), 1);" +
+"	vec3 prev_pass = texture2D(prev_tex, gl_FragCoord.xy / canvas_dim).rgb;" +
+"	gl_FragColor = vec4(prev_pass + (pass_color - prev_pass) / (sample + 1.0), 1.0);" +
 "}";
 
 window.onload = function(){
 	var canvas = document.getElementById("glcanvas");
 	var vertices = [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0];
+	WIDTH = canvas.getAttribute("width");
+	HEIGHT = canvas.getAttribute("height");
 
 	gl = initGL(canvas);
 	gl.disable(gl.DEPTH_TEST);
@@ -80,14 +86,16 @@ window.onload = function(){
 	pos_attrib = gl.getAttribLocation(raytrace, "pos");
 	sample_unif = gl.getUniformLocation(raytrace, "sample");
 	eye_unif = gl.getUniformLocation(raytrace, "eye");
+	var canvas_dim_unif = gl.getUniformLocation(raytrace, "canvas_dim");
 	var ray_unifs = [];
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray00"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray10"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray01"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
 	gl.useProgram(raytrace);
+	gl.uniform2f(canvas_dim_unif, WIDTH, HEIGHT);
 	var eye_pos = new Vec3f(0, 0, -2);
-	var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, 640 / 480);
+	var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, WIDTH / HEIGHT);
 	for (var i = 0; i < 4; ++i){
 		var vals = rays[i].flatten();
 		gl.uniform3fv(ray_unifs[i], rays[i].flatten());
@@ -104,7 +112,7 @@ window.onload = function(){
 	textures = [gl.createTexture(), gl.createTexture()];
 	for (var i = 0; i < 2; ++i){
 		gl.bindTexture(gl.TEXTURE_2D, textures[i]);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 640, 480, 0, gl.RGB, gl.FLOAT, null);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, WIDTH, HEIGHT, 0, gl.RGB, gl.FLOAT, null);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -129,7 +137,9 @@ window.onload = function(){
 // elapsed contains the time elapsed in seconds
 function render(elapsed){
 	var target = sample_pass % 2 == 0 ? 0 : 1;
+	var prev_tex = (target + 1) % 2;
 
+	gl.bindTexture(gl.TEXTURE_2D, textures[prev_tex]);
 	gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffers[target]);
 	gl.useProgram(raytrace);
 	gl.uniform1f(sample_unif, sample_pass);
