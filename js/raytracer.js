@@ -87,14 +87,14 @@ window.onload = function(){
 	sample_unif = gl.getUniformLocation(raytrace, "sample");
 	eye_unif = gl.getUniformLocation(raytrace, "eye");
 	var canvas_dim_unif = gl.getUniformLocation(raytrace, "canvas_dim");
-	var ray_unifs = [];
+	ray_unifs = [];
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray00"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray10"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray01"));
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
 	gl.useProgram(raytrace);
 	gl.uniform2f(canvas_dim_unif, WIDTH, HEIGHT);
-	var eye_pos = new Vec3f(0, 0, -2);
+	eye_pos = new Vec3f(0, 0, -2);
 	var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, WIDTH / HEIGHT);
 	for (var i = 0; i < 4; ++i){
 		var vals = rays[i].flatten();
@@ -139,9 +139,15 @@ function render(elapsed){
 	var target = sample_pass % 2 == 0 ? 0 : 1;
 	var prev_tex = (target + 1) % 2;
 
+	gl.useProgram(raytrace);
+	var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, WIDTH / HEIGHT);
+	for (var i = 0; i < 4; ++i){
+		var vals = rays[i].flatten();
+		gl.uniform3fv(ray_unifs[i], rays[i].flatten());
+	}
+
 	gl.bindTexture(gl.TEXTURE_2D, textures[prev_tex]);
 	gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffers[target]);
-	gl.useProgram(raytrace);
 	gl.uniform1f(sample_unif, sample_pass);
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -158,7 +164,8 @@ function render(elapsed){
 // Compute a perspective projection camera and return the directions to each corner pixel
 // returns: [ray00, ray01, ray10, ray11]
 function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
-	var dz = normalize(target.sub(eye));
+	var jitter = new Vec3f((Math.random() * 2 - 1) / WIDTH, (Math.random() * 2 - 1) / HEIGHT, 0);
+	var dz = normalize(target.sub(eye).add(jitter));
 	var dx = normalize(cross(dz, up).negate());
 	var dy = normalize(cross(dx, dz));
 	var dim_y = 2.0 * Math.sin(fovy / 2.0 * Math.PI / 180.0);
