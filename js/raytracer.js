@@ -94,7 +94,7 @@ window.onload = function(){
 	ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
 	gl.useProgram(raytrace);
 	gl.uniform2f(canvas_dim_unif, WIDTH, HEIGHT);
-	eye_pos = new Vec3f(0, 0, -2);
+	eye_pos = new Vec3f(0, 0, 2);
 	var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, WIDTH / HEIGHT);
 	for (var i = 0; i < 4; ++i){
 		var vals = rays[i].flatten();
