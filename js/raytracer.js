@@ -56,24 +56,44 @@ constants +
 "	float dz = den * (scene_distance(p + vec3(0, 0, h)) - scene_distance(p - vec3(0, 0, h)));" +
 "	return vec3(dx, dy, dz);" +
 "}" +
-"void main(void){" +
-"	vec3 ray_dir = normalize(px_ray);" +
+"bool shadow_test(vec3 ray_dir, vec3 ray_orig){" +
+"	const float max_dist = 1.0e10;" +
+"	const int max_iter = 50;" +
+"	float t = 0.001;" +
+"	for (int i = 0; i < max_iter; ++i){" +
+"		vec3 p = ray_orig + ray_dir * t;" +
+"		float dt = scene_distance(p);" +
+"		t += dt;" +
+"		if (dt <= 1.0e-4){" +
+"			return true;" +
+"		}" +
+"	}" +
+"	return false;" +
+"}" +
+"vec3 intersect_scene(vec3 ray_dir, vec3 ray_orig){" +
 "	const float max_dist = 1.0e10;" +
 "	const int max_iter = 50;" +
 "	float t = 0.0;" +
-"	vec3 pass_color;" +
+"	vec3 pass_color = vec3(0);" +
 "	for (int i = 0; i < max_iter; ++i){" +
-"		vec3 p = eye + ray_dir * t;" +
+"		vec3 p = ray_orig + ray_dir * t;" +
 "		float dt = scene_distance(p);" +
 "		t += dt;" +
-"		if (dt <= 1.0e-2){" +
-"			vec3 normal = vec3((normalize(gradient(p)) + vec3(1)) * 0.5);" +
-"			vec3 li = vec3(2.0);" +
-"			vec3 w_i = -normalize(vec3(0, 0, 1));" +
-"			pass_color = lambertian_material() * li * abs(dot(w_i, normal));" +
+"		if (dt <= 1.0e-4){" +
+"			vec3 li = vec3(2);" +
+"			vec3 w_i = -normalize(vec3(-3, 0, -2));" +
+"			if (!shadow_test(w_i, p)){" +
+"				vec3 normal = normalize(gradient(p));" +
+"				pass_color = lambertian_material() * li * abs(dot(w_i, normal));" +
+"			}" +
 "			break;" +
 "		}" +
 "	}" +
+"	return pass_color;" +
+"}" +
+"void main(void){" +
+"	vec3 ray_dir = normalize(px_ray);" +
+"	vec3 pass_color = intersect_scene(ray_dir, eye);" +
 "	vec3 prev_pass = texture2D(prev_tex, gl_FragCoord.xy / canvas_dim).rgb;" +
 "	gl_FragColor = vec4(prev_pass + (pass_color - prev_pass) / (sample + 1.0), 1.0);" +
 "}";
