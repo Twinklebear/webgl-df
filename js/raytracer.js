@@ -1,3 +1,5 @@
+var constants =
+"#define FRAC_1_PI 0.318309886183\n";
 var textured_quad_vs =
 "attribute vec2 pos;" +
 "varying vec2 texcoord;" +
@@ -25,6 +27,7 @@ var ray_vs_src =
 "}";
 
 var ray_fs_src =
+constants +
 "precision highp float;" +
 "uniform float sample;" +
 "uniform vec3 eye;" +
@@ -38,7 +41,12 @@ var ray_fs_src =
 "	return length(vec2(length(x.xy - c.xy) - r, x.z - c.z)) - ring_r;" +
 "}" +
 "float scene_distance(vec3 x){" +
-"	return sphere_distance(x, vec3(0, 0, 0), 0.5);" +
+"	vec3 centers = vec3(0, 0, 0);" +
+"	return min(sphere_distance(x, centers, 0.4), torus_distance(x, centers, 0.6, 0.1));" +
+"}" +
+"vec3 lambertian_material(){" +
+"	vec3 reflectance = vec3(1, 0, 0);" +
+"	return reflectance * FRAC_1_PI;" +
 "}" +
 "vec3 gradient(vec3 p){" +
 "	float h = 0.5 * 0.00001;" +
@@ -59,7 +67,10 @@ var ray_fs_src =
 "		float dt = scene_distance(p);" +
 "		t += dt;" +
 "		if (dt <= 1.0e-2){" +
-"			pass_color = vec3((normalize(gradient(p)) + vec3(1)) * 0.5);" +
+"			vec3 normal = vec3((normalize(gradient(p)) + vec3(1)) * 0.5);" +
+"			vec3 li = vec3(2.0);" +
+"			vec3 w_i = -normalize(vec3(0, 0, 1));" +
+"			pass_color = lambertian_material() * li * abs(dot(w_i, normal));" +
 "			break;" +
 "		}" +
 "	}" +
@@ -166,14 +177,18 @@ function render(elapsed){
 function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
 	var jitter = new Vec3f((Math.random() * 2 - 1) / WIDTH, (Math.random() * 2 - 1) / HEIGHT, 0);
 	var dz = normalize(target.sub(eye).add(jitter));
-	var dx = normalize(cross(dz, up).negate());
+	var dx = normalize(cross(dz, up));
 	var dy = normalize(cross(dx, dz));
 	var dim_y = 2.0 * Math.sin(fovy / 2.0 * Math.PI / 180.0);
-	var dim_x = dim_y * (1.0 / aspect_ratio);
+	var dim_x = dim_y * aspect_ratio;
 	rays = [];
+	// ray00
 	rays.push(normalize(dz.sub(dx.scale(0.5 * dim_x)).sub(dy.scale(0.5 * dim_y))));
-	rays.push(normalize(dz.sub(dx.scale(0.5 * dim_x)).add(dy.scale(0.5 * dim_y))));
+	// ray10
 	rays.push(normalize(dz.add(dx.scale(0.5 * dim_x)).sub(dy.scale(0.5 * dim_y))));
+	// ray01
+	rays.push(normalize(dz.sub(dx.scale(0.5 * dim_x)).add(dy.scale(0.5 * dim_y))));
+	// ray11
 	rays.push(normalize(dz.add(dx.scale(0.5 * dim_x)).add(dy.scale(0.5 * dim_y))));
 	return rays;
 }
