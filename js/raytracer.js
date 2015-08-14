@@ -72,6 +72,7 @@ constants +
 "}" +
 "vec3 intersect_scene(vec3 ray_dir, vec3 ray_orig){" +
 "	const float max_dist = 1.0e10;" +
+"	const vec3 light_pos = vec3(2, 3, 3);" +
 "	const int max_iter = 50;" +
 "	float t = 0.0;" +
 "	vec3 pass_color = vec3(0);" +
@@ -81,7 +82,7 @@ constants +
 "		t += dt;" +
 "		if (dt <= 1.0e-4){" +
 "			vec3 li = vec3(2);" +
-"			vec3 w_i = -normalize(vec3(-3, 0, -2));" +
+"			vec3 w_i = normalize(light_pos - p);" +
 "			if (!shadow_test(w_i, p)){" +
 "				vec3 normal = normalize(gradient(p));" +
 "				pass_color = lambertian_material() * li * abs(dot(w_i, normal));" +
@@ -161,7 +162,7 @@ window.onload = function(){
 	var start = new Date();
 	setInterval(function(){
 		render((new Date() - start) * 0.001);
-	}, 1000 / 5);
+	}, 200);
 }
 
 // Called every frame to render a new sampling pass
