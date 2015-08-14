@@ -26,6 +26,8 @@ var ray_vs_src =
 "	gl_Position = vec4(pos, 0, 1);" +
 "}";
 
+var light = new PointLight(new Vec3f(2, 3, 3), new Vec3f(10, 10, 10), "light");
+
 var ray_fs_src =
 constants +
 "precision highp float;" +
@@ -34,6 +36,7 @@ constants +
 "uniform sampler2D prev_tex;" +
 "uniform vec2 canvas_dim;" +
 "varying vec3 px_ray;" +
+POINT_LIGHT_SAMPLE_GLSL +
 "float sphere_distance(vec3 x, vec3 c, float r){" +
 "	return length(x - c) - r;" +
 "}" +
@@ -72,7 +75,6 @@ constants +
 "}" +
 "vec3 intersect_scene(vec3 ray_dir, vec3 ray_orig){" +
 "	const float max_dist = 1.0e10;" +
-"	const vec3 light_pos = vec3(2, 3, 3);" +
 "	const int max_iter = 50;" +
 "	float t = 0.0;" +
 "	vec3 pass_color = vec3(0);" +
@@ -81,8 +83,9 @@ constants +
 "		float dt = scene_distance(p);" +
 "		t += dt;" +
 "		if (dt <= 1.0e-4){" +
-"			vec3 li = vec3(2);" +
-"			vec3 w_i = normalize(light_pos - p);" +
+"			vec3 li = vec3(0);" +
+"			vec3 w_i = vec3(0);" +
+			light.sample("p", "li", "w_i") +
 "			if (!shadow_test(w_i, p)){" +
 "				vec3 normal = normalize(gradient(p));" +
 "				pass_color = lambertian_material() * li * abs(dot(w_i, normal));" +

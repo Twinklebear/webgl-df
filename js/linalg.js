@@ -25,6 +25,9 @@ Vec3f.prototype.flatten = function(){
 Vec3f.prototype.toString = function(){
 	return "Vec3f { x = " + this.x + ", y = " + this.y + ", z = " + this.z + " }";
 }
+Vec3f.prototype.to_glsl = function(){
+	return "vec3(" + this.x + ", " + this.y + ", " + this.z + ")";
+}
 
 function cross(a, b){
 	return new Vec3f(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
