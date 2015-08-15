@@ -169,8 +169,6 @@ function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
 }
 
 // Rebuild scene shader based on the updated scene
-// TODO: This should take a scene object containing the new scene
-// but for now we're just changing the global light
 function buildSceneShader(){
 	var scene_distance_function =
 		"float scene_distance(vec3 x){" +
@@ -228,13 +226,13 @@ function buildSceneShader(){
 		"}" +
 		"bool shadow_test(vec3 ray_dir, vec3 ray_orig){" +
 		"	const float max_dist = 1.0e10;" +
-		"	const int max_iter = 50;" +
-		"	float t = 0.003;" +
+		"	const int max_iter = 20;" +
+		"	float t = 0.001;" +
 		"	for (int i = 0; i < max_iter; ++i){" +
 		"		vec3 p = ray_orig + ray_dir * t;" +
 		"		float dt = scene_distance(p);" +
 		"		t += dt;" +
-		"		if (dt < 5.0e-5){" +
+		"		if (dt <= 1.0e-4){" +
 		"			return true;" +
 		"		}" +
 		"	}" +
@@ -243,14 +241,14 @@ function buildSceneShader(){
 		sample_lights_function +
 		"vec3 intersect_scene(vec3 ray_dir, vec3 ray_orig){" +
 		"	const float max_dist = 1.0e10;" +
-		"	const int max_iter = 50;" +
+		"	const int max_iter = 35;" +
 		"	float t = 0.0;" +
 		"	vec3 pass_color = vec3(0);" +
 		"	for (int i = 0; i < max_iter; ++i){" +
 		"		vec3 p = ray_orig + ray_dir * t;" +
 		"		float dt = scene_distance(p);" +
 		"		t += dt;" +
-		"		if (dt <= 1.0e-4){" +
+		"		if (dt <= 5.0e-6){" +
 		"			pass_color = sample_illumination(p);" +
 		"			break;" +
 		"		}" +
