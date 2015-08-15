@@ -19,6 +19,9 @@ Vec3f.prototype.scale = function(s){
 Vec3f.prototype.negate = function(){
 	return new Vec3f(-this.x, -this.y, -this.z);
 }
+Vec3f.prototype.equal = function(b){
+	return this.x === b.x && this.y === b.y && this.z === b.z;
+}
 Vec3f.prototype.flatten = function(){
 	return [this.x, this.y, this.z];
 }

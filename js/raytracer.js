@@ -28,80 +28,6 @@ var ray_vs_src =
 
 var light = new PointLight(new Vec3f(2, 3, 3), new Vec3f(10, 10, 10), "light");
 
-var ray_fs_src =
-constants +
-"precision highp float;" +
-"uniform float sample;" +
-"uniform vec3 eye;" +
-"uniform sampler2D prev_tex;" +
-"uniform vec2 canvas_dim;" +
-"varying vec3 px_ray;" +
-POINT_LIGHT_SAMPLE_GLSL +
-"float sphere_distance(vec3 x, vec3 c, float r){" +
-"	return length(x - c) - r;" +
-"}" +
-"float torus_distance(vec3 x, vec3 c, float r, float ring_r){" +
-"	return length(vec2(length(x.xy - c.xy) - r, x.z - c.z)) - ring_r;" +
-"}" +
-"float scene_distance(vec3 x){" +
-"	vec3 centers = vec3(0, 0, 0);" +
-"	return min(sphere_distance(x, centers, 0.4), torus_distance(x, centers, 0.6, 0.1));" +
-"}" +
-"vec3 lambertian_material(){" +
-"	vec3 reflectance = vec3(1, 0, 0);" +
-"	return reflectance * FRAC_1_PI;" +
-"}" +
-"vec3 gradient(vec3 p){" +
-"	float h = 0.5 * 0.00001;" +
-"	float den = 1.0 / (2.0 * h);" +
-"	float dx = den * (scene_distance(p + vec3(h, 0, 0)) - scene_distance(p - vec3(h, 0, 0)));" +
-"	float dy = den * (scene_distance(p + vec3(0, h, 0)) - scene_distance(p - vec3(0, h, 0)));" +
-"	float dz = den * (scene_distance(p + vec3(0, 0, h)) - scene_distance(p - vec3(0, 0, h)));" +
-"	return vec3(dx, dy, dz);" +
-"}" +
-"bool shadow_test(vec3 ray_dir, vec3 ray_orig){" +
-"	const float max_dist = 1.0e10;" +
-"	const int max_iter = 50;" +
-"	float t = 0.001;" +
-"	for (int i = 0; i < max_iter; ++i){" +
-"		vec3 p = ray_orig + ray_dir * t;" +
-"		float dt = scene_distance(p);" +
-"		t += dt;" +
-"		if (dt <= 1.0e-4){" +
-"			return true;" +
-"		}" +
-"	}" +
-"	return false;" +
-"}" +
-"vec3 intersect_scene(vec3 ray_dir, vec3 ray_orig){" +
-"	const float max_dist = 1.0e10;" +
-"	const int max_iter = 50;" +
-"	float t = 0.0;" +
-"	vec3 pass_color = vec3(0);" +
-"	for (int i = 0; i < max_iter; ++i){" +
-"		vec3 p = ray_orig + ray_dir * t;" +
-"		float dt = scene_distance(p);" +
-"		t += dt;" +
-"		if (dt <= 1.0e-4){" +
-"			vec3 li = vec3(0);" +
-"			vec3 w_i = vec3(0);" +
-			light.sample("p", "li", "w_i") +
-"			if (!shadow_test(w_i, p)){" +
-"				vec3 normal = normalize(gradient(p));" +
-"				pass_color = lambertian_material() * li * abs(dot(w_i, normal));" +
-"			}" +
-"			break;" +
-"		}" +
-"	}" +
-"	return pass_color;" +
-"}" +
-"void main(void){" +
-"	vec3 ray_dir = normalize(px_ray);" +
-"	vec3 pass_color = intersect_scene(ray_dir, eye);" +
-"	vec3 prev_pass = texture2D(prev_tex, gl_FragCoord.xy / canvas_dim).rgb;" +
-"	gl_FragColor = vec4(prev_pass + (pass_color - prev_pass) / (sample + 1.0), 1.0);" +
-"}";
-
 window.onload = function(){
 	var canvas = document.getElementById("glcanvas");
 	var vertices = [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0];
@@ -111,7 +37,7 @@ window.onload = function(){
 	gl = initGL(canvas);
 	gl.disable(gl.DEPTH_TEST);
 
-	raytrace = compileShader(ray_vs_src, ray_fs_src);
+	raytrace = buildSceneShader();
 	textured_quad = compileShader(textured_quad_vs, textured_quad_fs);
 
 	vbo = gl.createBuffer();
@@ -161,6 +87,10 @@ window.onload = function(){
 	}
 
 	sample_pass = 0;
+	// Set the light x slider to the initial position
+	document.getElementById("light_x").value = (light.pos.x + 5) * 5;
+	document.getElementById("light_y").value = (light.pos.y + 5) * 5;
+	document.getElementById("light_z").value = (light.pos.z + 5) * 5;
 
 	var start = new Date();
 	setInterval(function(){
@@ -171,6 +101,32 @@ window.onload = function(){
 // Called every frame to render a new sampling pass
 // elapsed contains the time elapsed in seconds
 function render(elapsed){
+	var light_sliders = new Vec3f(document.getElementById("light_x").value / 5 - 5,
+			document.getElementById("light_y").value / 5 - 5,
+			document.getElementById("light_z").value / 5 - 5);
+	if (!light.pos.equal(light_sliders)){
+		light.pos = light_sliders;
+		raytrace = buildSceneShader();
+		pos_attrib = gl.getAttribLocation(raytrace, "pos");
+		sample_unif = gl.getUniformLocation(raytrace, "sample");
+		eye_unif = gl.getUniformLocation(raytrace, "eye");
+		var canvas_dim_unif = gl.getUniformLocation(raytrace, "canvas_dim");
+		ray_unifs = [];
+		ray_unifs.push(gl.getUniformLocation(raytrace, "ray00"));
+		ray_unifs.push(gl.getUniformLocation(raytrace, "ray10"));
+		ray_unifs.push(gl.getUniformLocation(raytrace, "ray01"));
+		ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
+		gl.useProgram(raytrace);
+		gl.uniform2f(canvas_dim_unif, WIDTH, HEIGHT);
+		eye_pos = new Vec3f(0, 0, 2);
+		var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, WIDTH / HEIGHT);
+		for (var i = 0; i < 4; ++i){
+			var vals = rays[i].flatten();
+			gl.uniform3fv(ray_unifs[i], rays[i].flatten());
+		}
+		gl.uniform3fv(eye_unif, eye_pos.flatten());
+		sample_pass = 0;
+	}
 	var target = sample_pass % 2 == 0 ? 0 : 1;
 	var prev_tex = (target + 1) % 2;
 
@@ -215,6 +171,86 @@ function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
 	// ray11
 	rays.push(normalize(dz.add(dx.scale(0.5 * dim_x)).add(dy.scale(0.5 * dim_y))));
 	return rays;
+}
+
+// Rebuild scene shader based on the updated scene
+// TODO: This should take a scene object containing the new scene
+// but for now we're just changing the global light
+function buildSceneShader(){
+	var ray_fs_src =
+		constants +
+		"precision highp float;" +
+		"uniform float sample;" +
+		"uniform vec3 eye;" +
+		"uniform sampler2D prev_tex;" +
+		"uniform vec2 canvas_dim;" +
+		"varying vec3 px_ray;" +
+		POINT_LIGHT_SAMPLE_GLSL +
+		"float sphere_distance(vec3 x, vec3 c, float r){" +
+		"	return length(x - c) - r;" +
+		"}" +
+		"float torus_distance(vec3 x, vec3 c, float r, float ring_r){" +
+		"	return length(vec2(length(x.xy - c.xy) - r, x.z - c.z)) - ring_r;" +
+		"}" +
+		"float scene_distance(vec3 x){" +
+		"	vec3 centers = vec3(0, 0, 0);" +
+		"	return min(sphere_distance(x, centers, 0.4), torus_distance(x, centers, 0.6, 0.1));" +
+		"}" +
+		"vec3 lambertian_material(){" +
+		"	vec3 reflectance = vec3(1, 0, 0);" +
+		"	return reflectance * FRAC_1_PI;" +
+		"}" +
+		"vec3 gradient(vec3 p){" +
+		"	float h = 0.5 * 0.00001;" +
+		"	float den = 1.0 / (2.0 * h);" +
+		"	float dx = den * (scene_distance(p + vec3(h, 0, 0)) - scene_distance(p - vec3(h, 0, 0)));" +
+		"	float dy = den * (scene_distance(p + vec3(0, h, 0)) - scene_distance(p - vec3(0, h, 0)));" +
+		"	float dz = den * (scene_distance(p + vec3(0, 0, h)) - scene_distance(p - vec3(0, 0, h)));" +
+		"	return vec3(dx, dy, dz);" +
+		"}" +
+		"bool shadow_test(vec3 ray_dir, vec3 ray_orig){" +
+		"	const float max_dist = 1.0e10;" +
+		"	const int max_iter = 50;" +
+		"	float t = 0.001;" +
+		"	for (int i = 0; i < max_iter; ++i){" +
+		"		vec3 p = ray_orig + ray_dir * t;" +
+		"		float dt = scene_distance(p);" +
+		"		t += dt;" +
+		"		if (dt <= 1.0e-4){" +
+		"			return true;" +
+		"		}" +
+		"	}" +
+		"	return false;" +
+		"}" +
+		"vec3 intersect_scene(vec3 ray_dir, vec3 ray_orig){" +
+		"	const float max_dist = 1.0e10;" +
+		"	const int max_iter = 50;" +
+		"	float t = 0.0;" +
+		"	vec3 pass_color = vec3(0);" +
+		"	for (int i = 0; i < max_iter; ++i){" +
+		"		vec3 p = ray_orig + ray_dir * t;" +
+		"		float dt = scene_distance(p);" +
+		"		t += dt;" +
+		"		if (dt <= 1.0e-4){" +
+		"			vec3 li = vec3(0);" +
+		"			vec3 w_i = vec3(0);" +
+		light.sample("p", "li", "w_i") +
+		"			if (!shadow_test(w_i, p)){" +
+		"				vec3 normal = normalize(gradient(p));" +
+		"				pass_color = lambertian_material() * li * abs(dot(w_i, normal));" +
+		"			}" +
+		"			break;" +
+		"		}" +
+		"	}" +
+		"	return pass_color;" +
+		"}" +
+		"void main(void){" +
+		"	vec3 ray_dir = normalize(px_ray);" +
+		"	vec3 pass_color = intersect_scene(ray_dir, eye);" +
+		"	vec3 prev_pass = texture2D(prev_tex, gl_FragCoord.xy / canvas_dim).rgb;" +
+		"	gl_FragColor = vec4(prev_pass + (pass_color - prev_pass) / (sample + 1.0), 1.0);" +
+		"}";
+	return compileShader(ray_vs_src, ray_fs_src);
 }
 
 // Initialize a WebGL context in the canvas DOM element passed
