@@ -73,7 +73,7 @@ window.onload = function(){
 	textures = [gl.createTexture(), gl.createTexture()];
 	for (var i = 0; i < 2; ++i){
 		gl.bindTexture(gl.TEXTURE_2D, textures[i]);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, WIDTH, HEIGHT, 0, gl.RGB, gl.FLOAT, null);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, WIDTH, HEIGHT, 0, gl.RGB, texture_type, null);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -267,8 +267,12 @@ function initGL(canvas){
 		return null;
 	}
 	if (!gl.getExtension("OES_texture_float")){
-		alert("Unable to get OES_texture_float extension. Your browser may not support it");
-		return null;
+		alert("Unable to get OES_texture_float extension. The image may not converge properly");
+		texture_type = gl.UNSIGNED_BYTE;
+		return gl;
+	}
+	else {
+		texture_type = gl.FLOAT;
 	}
 	return gl;
 }
