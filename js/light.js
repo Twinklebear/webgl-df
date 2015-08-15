@@ -1,7 +1,6 @@
-var PointLight = function(pos, emission, tag){
+var PointLight = function(pos, emission){
 	this.pos = pos;
 	this.emission = emission;
-	this.tag = tag;
 }
 
 var POINT_LIGHT_SAMPLE_GLSL =
@@ -20,5 +19,21 @@ var POINT_LIGHT_SAMPLE_GLSL =
 PointLight.prototype.sample = function(p, li, w_i){
 	return li + " = sample_point_light(" + this.pos.to_glsl()
 		+ ", " + this.emission.to_glsl() + ", " + p + ", " + w_i + ");"
+}
+
+var DirectLight = function(dir, emission){
+	this.dir = dir;
+	this.emission = emission;
+}
+
+var DIRECT_LIGHT_SAMPLE_GLSL =
+"vec3 sample_direct_light(vec3 light_dir, vec3 emission, vec3 p, out vec3 w_i){" +
+"	w_i = normalize(light_dir);" +
+"	return emission;" +
+"}";
+
+DirectLight.prototype.sample = function(p, li, w_i){
+	return li + " = sample_direct_light(" + this.dir.to_glsl()
+		+ ", " + this.emission.to_glsl() + ", " + p  + ", " + w_i + ");";
 }
 

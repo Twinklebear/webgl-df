@@ -30,10 +30,14 @@ var ray_vs_src =
 "	gl_Position = vec4(pos, 0, 1);" +
 "}";
 
-var light = new PointLight(new Vec3f(2, 3, 3), new Vec3f(10, 10, 10), "light");
+var light = new PointLight(new Vec3f(2, 3, 3), new Vec3f(10, 10, 10));
+var direct_light = new DirectLight(new Vec3f(1, 0, 1), new Vec3f(0, 0, 0.8));
+var lights = [light, direct_light];
+
 var sphere1 = new Sphere(new Vec3f(0, 0, 0), 0.4);
 var sphere2 = new Sphere(new Vec3f(1, 0, 0), 0.4);
-var scene = [sphere1, sphere2];
+var torus = new Torus(new Vec3f(0, 0, 0), 0.7, 0.1);
+var scene = [sphere1, sphere2, torus];
 
 window.onload = function(){
 	var canvas = document.getElementById("glcanvas");
@@ -94,10 +98,13 @@ window.onload = function(){
 	}
 
 	sample_pass = 0;
+	light_slider_x = document.getElementById("light_x");
+	light_slider_y = document.getElementById("light_y");
+	light_slider_z = document.getElementById("light_z");
 	// Set the light x slider to the initial position
-	document.getElementById("light_x").value = (light.pos.x + 5) * 5;
-	document.getElementById("light_y").value = (light.pos.y + 5) * 5;
-	document.getElementById("light_z").value = (light.pos.z + 5) * 5;
+	light_slider_x.value = (light.pos.x + 5) * 5;
+	light_slider_y.value = (light.pos.y + 5) * 5;
+	light_slider_z.value = (light.pos.z + 5) * 5;
 
 	var start = new Date();
 	setInterval(function(){
@@ -108,9 +115,8 @@ window.onload = function(){
 // Called every frame to render a new sampling pass
 // elapsed contains the time elapsed in seconds
 function render(elapsed){
-	var light_sliders = new Vec3f(document.getElementById("light_x").value / 5 - 5,
-			document.getElementById("light_y").value / 5 - 5,
-			document.getElementById("light_z").value / 5 - 5);
+	var light_sliders = new Vec3f(light_slider_x.value / 5 - 5,
+			light_slider_y.value / 5 - 5, light_slider_z.value / 5 - 5);
 	if (!light.pos.equal(light_sliders)){
 		light.pos = light_sliders;
 		raytrace = buildSceneShader();
@@ -176,6 +182,25 @@ function buildSceneShader(){
 	}
 	scene_distance_function += "return dist;}";
 
+	var sample_lights_function =
+		"vec3 sample_illumination(vec3 p){" +
+		"	vec3 illum = vec3(0);" +
+		"	vec3 li = vec3(0);" +
+		"	vec3 w_i = vec3(0);";
+	for (var i = 0; i < lights.length; ++i){
+		sample_lights_function += lights[i].sample("p", "li", "w_i");
+		sample_lights_function +=
+		"	if (!shadow_test(w_i, p)){" +
+		"		vec3 normal = normalize(gradient(p));" +
+		"		illum += lambertian_material() * li * abs(dot(w_i, normal));" +
+		"	}";
+	}
+	sample_lights_function +=
+		"	illum.r = clamp(illum.r, 0.0, 1.0);" +
+		"	illum.g = clamp(illum.g, 0.0, 1.0);" +
+		"	illum.b = clamp(illum.b, 0.0, 1.0);" +
+		"	return illum;}";
+
 	var ray_fs_src =
 		constants +
 		"precision highp float;" +
@@ -185,13 +210,12 @@ function buildSceneShader(){
 		"uniform vec2 canvas_dim;" +
 		"varying vec3 px_ray;" +
 		POINT_LIGHT_SAMPLE_GLSL +
+		DIRECT_LIGHT_SAMPLE_GLSL +
 		SPHERE_DISTANCE_GLSL +
-		"float torus_distance(vec3 x, vec3 c, float r, float ring_r){" +
-		"	return length(vec2(length(x.xy - c.xy) - r, x.z - c.z)) - ring_r;" +
-		"}" +
+		TORUS_DISTANCE_GLSL +
 		scene_distance_function +
 		"vec3 lambertian_material(){" +
-		"	vec3 reflectance = vec3(1, 0, 0);" +
+		"	vec3 reflectance = vec3(1, 0.1, 0.1);" +
 		"	return reflectance * FRAC_1_PI;" +
 		"}" +
 		"vec3 gradient(vec3 p){" +
@@ -210,12 +234,13 @@ function buildSceneShader(){
 		"		vec3 p = ray_orig + ray_dir * t;" +
 		"		float dt = scene_distance(p);" +
 		"		t += dt;" +
-		"		if (dt < 1.0e-4){" +
+		"		if (dt < 5.0e-5){" +
 		"			return true;" +
 		"		}" +
 		"	}" +
 		"	return false;" +
 		"}" +
+		sample_lights_function +
 		"vec3 intersect_scene(vec3 ray_dir, vec3 ray_orig){" +
 		"	const float max_dist = 1.0e10;" +
 		"	const int max_iter = 50;" +
@@ -226,13 +251,7 @@ function buildSceneShader(){
 		"		float dt = scene_distance(p);" +
 		"		t += dt;" +
 		"		if (dt <= 1.0e-4){" +
-		"			vec3 li = vec3(0);" +
-		"			vec3 w_i = vec3(0);" +
-		light.sample("p", "li", "w_i") +
-		"			if (!shadow_test(w_i, p)){" +
-		"				vec3 normal = normalize(gradient(p));" +
-		"				pass_color = lambertian_material() * li * abs(dot(w_i, normal));" +
-		"			}" +
+		"			pass_color = sample_illumination(p);" +
 		"			break;" +
 		"		}" +
 		"	}" +
