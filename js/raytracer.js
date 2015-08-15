@@ -13,7 +13,11 @@ var textured_quad_fs =
 "uniform sampler2D tex;" +
 "varying vec2 texcoord;" +
 "void main(void){" +
-"	gl_FragColor = texture2D(tex, texcoord);" +
+"	vec4 color = texture2D(tex, texcoord);" +
+"	color.r = pow(color.r, 1.0 / 2.2);" +
+"	color.g = pow(color.g, 1.0 / 2.2);" +
+"	color.b = pow(color.b, 1.0 / 2.2);" +
+"	gl_FragColor = color;" +
 "}";
 
 var ray_vs_src =
@@ -27,6 +31,9 @@ var ray_vs_src =
 "}";
 
 var light = new PointLight(new Vec3f(2, 3, 3), new Vec3f(10, 10, 10), "light");
+var sphere1 = new Sphere(new Vec3f(0, 0, 0), 0.4);
+var sphere2 = new Sphere(new Vec3f(1, 0, 0), 0.4);
+var scene = [sphere1, sphere2];
 
 window.onload = function(){
 	var canvas = document.getElementById("glcanvas");
@@ -107,24 +114,6 @@ function render(elapsed){
 	if (!light.pos.equal(light_sliders)){
 		light.pos = light_sliders;
 		raytrace = buildSceneShader();
-		pos_attrib = gl.getAttribLocation(raytrace, "pos");
-		sample_unif = gl.getUniformLocation(raytrace, "sample");
-		eye_unif = gl.getUniformLocation(raytrace, "eye");
-		var canvas_dim_unif = gl.getUniformLocation(raytrace, "canvas_dim");
-		ray_unifs = [];
-		ray_unifs.push(gl.getUniformLocation(raytrace, "ray00"));
-		ray_unifs.push(gl.getUniformLocation(raytrace, "ray10"));
-		ray_unifs.push(gl.getUniformLocation(raytrace, "ray01"));
-		ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
-		gl.useProgram(raytrace);
-		gl.uniform2f(canvas_dim_unif, WIDTH, HEIGHT);
-		eye_pos = new Vec3f(0, 0, 2);
-		var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, WIDTH / HEIGHT);
-		for (var i = 0; i < 4; ++i){
-			var vals = rays[i].flatten();
-			gl.uniform3fv(ray_unifs[i], rays[i].flatten());
-		}
-		gl.uniform3fv(eye_unif, eye_pos.flatten());
 		sample_pass = 0;
 	}
 	var target = sample_pass % 2 == 0 ? 0 : 1;
@@ -177,6 +166,16 @@ function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
 // TODO: This should take a scene object containing the new scene
 // but for now we're just changing the global light
 function buildSceneShader(){
+	var scene_distance_function =
+		"float scene_distance(vec3 x){" +
+		"	float dist = 1e32;" +
+		"	float d = 0.0;";
+	for (var i = 0; i < scene.length; ++i){
+		scene_distance_function += scene[i].distance("x", "d");
+		scene_distance_function += "dist = min(d, dist);";
+	}
+	scene_distance_function += "return dist;}";
+
 	var ray_fs_src =
 		constants +
 		"precision highp float;" +
@@ -186,16 +185,11 @@ function buildSceneShader(){
 		"uniform vec2 canvas_dim;" +
 		"varying vec3 px_ray;" +
 		POINT_LIGHT_SAMPLE_GLSL +
-		"float sphere_distance(vec3 x, vec3 c, float r){" +
-		"	return length(x - c) - r;" +
-		"}" +
+		SPHERE_DISTANCE_GLSL +
 		"float torus_distance(vec3 x, vec3 c, float r, float ring_r){" +
 		"	return length(vec2(length(x.xy - c.xy) - r, x.z - c.z)) - ring_r;" +
 		"}" +
-		"float scene_distance(vec3 x){" +
-		"	vec3 centers = vec3(0, 0, 0);" +
-		"	return min(sphere_distance(x, centers, 0.4), torus_distance(x, centers, 0.6, 0.1));" +
-		"}" +
+		scene_distance_function +
 		"vec3 lambertian_material(){" +
 		"	vec3 reflectance = vec3(1, 0, 0);" +
 		"	return reflectance * FRAC_1_PI;" +
@@ -211,12 +205,12 @@ function buildSceneShader(){
 		"bool shadow_test(vec3 ray_dir, vec3 ray_orig){" +
 		"	const float max_dist = 1.0e10;" +
 		"	const int max_iter = 50;" +
-		"	float t = 0.001;" +
+		"	float t = 0.003;" +
 		"	for (int i = 0; i < max_iter; ++i){" +
 		"		vec3 p = ray_orig + ray_dir * t;" +
 		"		float dt = scene_distance(p);" +
 		"		t += dt;" +
-		"		if (dt <= 1.0e-4){" +
+		"		if (dt < 1.0e-4){" +
 		"			return true;" +
 		"		}" +
 		"	}" +
@@ -250,7 +244,26 @@ function buildSceneShader(){
 		"	vec3 prev_pass = texture2D(prev_tex, gl_FragCoord.xy / canvas_dim).rgb;" +
 		"	gl_FragColor = vec4(prev_pass + (pass_color - prev_pass) / (sample + 1.0), 1.0);" +
 		"}";
-	return compileShader(ray_vs_src, ray_fs_src);
+	var raytrace = compileShader(ray_vs_src, ray_fs_src);
+	pos_attrib = gl.getAttribLocation(raytrace, "pos");
+	sample_unif = gl.getUniformLocation(raytrace, "sample");
+	eye_unif = gl.getUniformLocation(raytrace, "eye");
+	var canvas_dim_unif = gl.getUniformLocation(raytrace, "canvas_dim");
+	ray_unifs = [];
+	ray_unifs.push(gl.getUniformLocation(raytrace, "ray00"));
+	ray_unifs.push(gl.getUniformLocation(raytrace, "ray10"));
+	ray_unifs.push(gl.getUniformLocation(raytrace, "ray01"));
+	ray_unifs.push(gl.getUniformLocation(raytrace, "ray11"));
+	gl.useProgram(raytrace);
+	gl.uniform2f(canvas_dim_unif, WIDTH, HEIGHT);
+	eye_pos = new Vec3f(0, 0, 2);
+	var rays = perspectiveCamera(eye_pos, new Vec3f(0, 0, 0), new Vec3f(0, 1, 0), 60.0, WIDTH / HEIGHT);
+	for (var i = 0; i < 4; ++i){
+		var vals = rays[i].flatten();
+		gl.uniform3fv(ray_unifs[i], rays[i].flatten());
+	}
+	gl.uniform3fv(eye_unif, eye_pos.flatten());
+	return raytrace;
 }
 
 // Initialize a WebGL context in the canvas DOM element passed
