@@ -34,9 +34,13 @@ var light = new PointLight(new Vec3f(2, 3, 3), new Vec3f(10, 10, 10));
 var direct_light = new DirectLight(new Vec3f(1, 0, 1), new Vec3f(0, 0, 0.8));
 var lights = [light, direct_light];
 
-var sphere1 = new Sphere(new Vec3f(0, 0, 0), 0.4);
-var sphere2 = new Sphere(new Vec3f(1, 0, 0), 0.4);
-var torus = new Torus(new Vec3f(0, 0, 0), 0.7, 0.1);
+var red_lambertian = new LambertianMaterial(new Vec3f(1, 0.1, 0.1));
+var yellow_lambertian = new LambertianMaterial(new Vec3f(1.0, 1.0, 0.1));
+var materials = [red_lambertian, yellow_lambertian];
+
+var sphere1 = new Sphere(new Vec3f(0, 0, 0), 0.4, 0);
+var sphere2 = new Sphere(new Vec3f(1, 0, 0), 0.4, 0);
+var torus = new Torus(new Vec3f(0, 0, 0), 0.7, 0.1, 1);
 var scene = [sphere1, sphere2, torus];
 
 window.onload = function(){
@@ -171,6 +175,18 @@ function perspectiveCamera(eye, target, up, fovy, aspect_ratio){
 // Rebuild scene shader based on the updated scene
 function buildSceneShader(){
 	var scene_distance_function =
+		"float scene_distance(vec3 x, out int mat){" +
+		"	float dist = 1e32;" +
+		"	mat = -1;" +
+		"	float d = 0.0;" +
+		"	int m = -1;";
+	for (var i = 0; i < scene.length; ++i){
+		scene_distance_function += scene[i].distance("x", "d", "m");
+		scene_distance_function += "dist = min(d, dist); mat = dist == d ? m : mat;";
+	}
+	scene_distance_function += "return dist;}";
+
+	scene_distance_function +=
 		"float scene_distance(vec3 x){" +
 		"	float dist = 1e32;" +
 		"	float d = 0.0;";
@@ -181,7 +197,7 @@ function buildSceneShader(){
 	scene_distance_function += "return dist;}";
 
 	var sample_lights_function =
-		"vec3 sample_illumination(vec3 p){" +
+		"vec3 sample_illumination(vec3 p, vec3 w_o, int mat){" +
 		"	vec3 illum = vec3(0);" +
 		"	vec3 li = vec3(0);" +
 		"	vec3 w_i = vec3(0);";
@@ -190,7 +206,7 @@ function buildSceneShader(){
 		sample_lights_function +=
 		"	if (!shadow_test(w_i, p)){" +
 		"		vec3 normal = normalize(gradient(p));" +
-		"		illum += lambertian_material() * li * abs(dot(w_i, normal));" +
+		"		illum += shade_material(mat, -w_i, w_o) * li * abs(dot(w_i, normal));" +
 		"	}";
 	}
 	sample_lights_function +=
@@ -198,6 +214,15 @@ function buildSceneShader(){
 		"	illum.g = clamp(illum.g, 0.0, 1.0);" +
 		"	illum.b = clamp(illum.b, 0.0, 1.0);" +
 		"	return illum;}";
+
+	var shade_materials_function =
+		"vec3 shade_material(int mat, vec3 w_i, vec3 w_o){" +
+		"	vec3 f = vec3(0);";
+	for (var i = 0; i < materials.length; ++i){
+		shade_materials_function += "if (mat == " + i + "){"
+			+ materials[i].shade("f", "w_i", "w_o") + "return f;}";
+	}
+	shade_materials_function += "return f;}";
 
 	var ray_fs_src =
 		constants +
@@ -211,11 +236,9 @@ function buildSceneShader(){
 		DIRECT_LIGHT_SAMPLE_GLSL +
 		SPHERE_DISTANCE_GLSL +
 		TORUS_DISTANCE_GLSL +
+		LAMBERTIAN_MATERIAL_GLSL +
+		shade_materials_function +
 		scene_distance_function +
-		"vec3 lambertian_material(){" +
-		"	vec3 reflectance = vec3(1, 0.1, 0.1);" +
-		"	return reflectance * FRAC_1_PI;" +
-		"}" +
 		"vec3 gradient(vec3 p){" +
 		"	float h = 0.5 * 0.00001;" +
 		"	float den = 1.0 / (2.0 * h);" +
@@ -228,6 +251,7 @@ function buildSceneShader(){
 		"	const float max_dist = 1.0e10;" +
 		"	const int max_iter = 20;" +
 		"	float t = 0.001;" +
+		"	int mat = -1;" +
 		"	for (int i = 0; i < max_iter; ++i){" +
 		"		vec3 p = ray_orig + ray_dir * t;" +
 		"		float dt = scene_distance(p);" +
@@ -244,12 +268,13 @@ function buildSceneShader(){
 		"	const int max_iter = 35;" +
 		"	float t = 0.0;" +
 		"	vec3 pass_color = vec3(0);" +
+		"	int mat = -1;" +
 		"	for (int i = 0; i < max_iter; ++i){" +
 		"		vec3 p = ray_orig + ray_dir * t;" +
-		"		float dt = scene_distance(p);" +
+		"		float dt = scene_distance(p, mat);" +
 		"		t += dt;" +
 		"		if (dt <= 5.0e-6){" +
-		"			pass_color = sample_illumination(p);" +
+		"			pass_color = sample_illumination(p, -ray_dir, mat);" +
 		"			break;" +
 		"		}" +
 		"	}" +
