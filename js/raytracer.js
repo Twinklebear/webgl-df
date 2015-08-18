@@ -34,13 +34,14 @@ var light = new PointLight(new Vec3f(2, 3, 3), new Vec3f(10, 10, 10));
 var direct_light = new DirectLight(new Vec3f(1, 0, 1), new Vec3f(0, 0, 0.8));
 var lights = [light, direct_light];
 
+var red_oren_nayar = new OrenNayarMaterial(new Vec3f(1, 0.1, 0.1), 1.0);
 var red_lambertian = new LambertianMaterial(new Vec3f(1, 0.1, 0.1));
 var yellow_lambertian = new LambertianMaterial(new Vec3f(1.0, 1.0, 0.1));
-var materials = [red_lambertian, yellow_lambertian];
+var materials = [red_oren_nayar, red_lambertian, yellow_lambertian];
 
 var sphere1 = new Sphere(new Vec3f(0, 0, 0), 0.4, 0);
-var sphere2 = new Sphere(new Vec3f(1, 0, 0), 0.4, 0);
-var torus = new Torus(new Vec3f(0, 0, 0), 0.7, 0.1, 1);
+var sphere2 = new Sphere(new Vec3f(1, 0, 0), 0.4, 1);
+var torus = new Torus(new Vec3f(0, 0, 0), 0.7, 0.1, 2);
 var scene = [sphere1, sphere2, torus];
 
 window.onload = function(){
@@ -206,7 +207,14 @@ function buildSceneShader(){
 		sample_lights_function +=
 		"	if (!shadow_test(w_i, p)){" +
 		"		vec3 normal = normalize(gradient(p));" +
-		"		illum += shade_material(mat, -w_i, w_o) * li * abs(dot(w_i, normal));" +
+		"		vec3 tan = vec3(0);" +
+		"		vec3 bitan = vec3(0);" +
+		"		coordinate_system(normal, tan, bitan);" +
+		"		vec3 w_is = vec3(0);" +
+		"		vec3 w_os = vec3(0);" +
+				transform_to_shading_glsl("normal", "tan", "bitan", "w_i", "w_is") +
+				transform_to_shading_glsl("normal", "tan", "bitan", "w_o", "w_os") +
+		"		illum += shade_material(mat, -w_is, w_os) * li * abs(dot(w_i, normal));" +
 		"	}";
 	}
 	sample_lights_function +=
@@ -236,7 +244,9 @@ function buildSceneShader(){
 		DIRECT_LIGHT_SAMPLE_GLSL +
 		SPHERE_DISTANCE_GLSL +
 		TORUS_DISTANCE_GLSL +
+		MATERIAL_FUNCTIONS_GLSL +
 		LAMBERTIAN_MATERIAL_GLSL +
+		OREN_NAYAR_MATERIAL_GLSL +
 		shade_materials_function +
 		scene_distance_function +
 		"vec3 gradient(vec3 p){" +
